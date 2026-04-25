@@ -1,0 +1,11 @@
+version: "v1"
+
+# Basic router configuration for local development
+graph:
+  name: "agent-court"
+  
+server:
+  listen_addr: "0.0.0.0:4000"
+  
+# Placeholder for MCP Gateway configuration
+# Will be configured once subgraphs are defined

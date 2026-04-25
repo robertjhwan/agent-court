@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  cosmo-router:
+    image: ghcr.io/wundergraph/cosmo/router:latest
+    ports:
+      - "4000:4000"
+    environment:
+      - GRAPH_API_TOKEN=${COSMO_API_KEY:-}
+      - LISTEN_ADDR=0.0.0.0:4000
+    volumes:
+      - ./config:/config
+    command: ["--config", "/config/router.yaml"]

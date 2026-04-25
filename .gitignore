@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Env and secrets
+.env
+.env*.local
+.env.production
+
+# OS / editors
+.DS_Store
+*.log
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Prisma
+generated/
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+
+# Debug / test
+coverage/
+.turbo
+.vercel
