@@ -43,6 +43,7 @@ export default function TrialPage() {
 
   const [juryVotes, setJuryVotes] = useState<JuryVoteData[]>([]);
   const [verdict, setVerdict] = useState<{ verdict: string; sentence: string; tally?: { reject: number; retry: number; approve: number } } | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   const courtScrollRef = useRef<HTMLDivElement>(null);
   const streamStartedFor = useRef<string | null>(null);
@@ -52,106 +53,129 @@ export default function TrialPage() {
     if (streamStartedFor.current === caseId) return;
     streamStartedFor.current = caseId;
 
-    fetch(`/api/cases/${caseId}`)
-      .then((res) => res.json())
-      .then((data) => setCaseTask(data?.task ?? null))
-      .catch(() => {});
+    let cancelled = false;
+    let eventSource: EventSource | null = null;
 
-    const eventSource = new EventSource(
-      `/api/cases/${caseId}/stream${isDemo ? "?demo=true" : "?demo=false"}`
-    );
-
-    eventSource.onmessage = (event) => {
-      let data: any;
+    // Verify the case exists before opening the stream so we can show a
+    // friendly UI instead of a generic stream error if the in-process store
+    // was wiped (e.g. dev server restarted).
+    (async () => {
       try {
-        data = JSON.parse(event.data);
+        const res = await fetch(`/api/cases/${caseId}`);
+        if (cancelled) return;
+        if (res.status === 404) {
+          setNotFound(true);
+          return;
+        }
+        const data = await res.json();
+        setCaseTask(data?.task ?? null);
       } catch {
-        return;
+        // Network blip — let the stream try anyway.
       }
 
-      switch (data.type) {
-        case "phase":
-          setPhase(data.phase);
-          setPhaseText(data.text);
-          setCourtEvents((prev) => [...prev, { kind: "phase", phase: data.phase, text: data.text }]);
-          break;
+      if (cancelled) return;
 
-        case "speaker":
-          setCurrentSpeaker(data.role);
-          break;
+      eventSource = new EventSource(
+        `/api/cases/${caseId}/stream${isDemo ? "?demo=true" : "?demo=false"}`
+      );
+      attachStreamHandlers(eventSource);
+    })();
 
-        case "tool_call": {
-          const call: StreamedToolCall = {
-            tool: data.call.tool,
-            cost: data.call.cost,
-            latencyMs: data.call.latencyMs,
-            variant: data.variant,
-          };
-          if (data.variant === "BASELINE") {
-            setBaselineCalls((prev) => [...prev, call]);
-            setBaselineCost(data.runningCost);
-          } else {
-            setWgCalls((prev) => [...prev, call]);
-            setWgCost(data.runningCost);
-          }
-          break;
+    function attachStreamHandlers(es: EventSource) {
+      es.onmessage = (event) => {
+        let data: any;
+        try {
+          data = JSON.parse(event.data);
+        } catch {
+          return;
         }
 
-        case "agent_complete":
-          // Lock final cost in case of any drift
-          if (data.variant === "BASELINE") setBaselineCost(data.run.totalCost);
-          if (data.variant === "WUNDERGRAPH") setWgCost(data.run.totalCost);
-          break;
+        switch (data.type) {
+          case "phase":
+            setPhase(data.phase);
+            setPhaseText(data.text);
+            setCourtEvents((prev) => [...prev, { kind: "phase", phase: data.phase, text: data.text }]);
+            break;
 
-        case "message":
-          setCurrentSpeaker(null);
-          setCourtEvents((prev) => [
-            ...prev,
-            {
-              kind: "message",
-              role: data.role,
-              text: data.text,
-              citedExhibitIds: data.citedExhibitIds,
-            },
-          ]);
-          break;
+          case "speaker":
+            setCurrentSpeaker(data.role);
+            break;
 
-        case "jury_vote":
-          setJuryVotes((prev) => [...prev, data.vote]);
-          break;
+          case "tool_call": {
+            const call: StreamedToolCall = {
+              tool: data.call.tool,
+              cost: data.call.cost,
+              latencyMs: data.call.latencyMs,
+              variant: data.variant,
+            };
+            if (data.variant === "BASELINE") {
+              setBaselineCalls((prev) => [...prev, call]);
+              setBaselineCost(data.runningCost);
+            } else {
+              setWgCalls((prev) => [...prev, call]);
+              setWgCost(data.runningCost);
+            }
+            break;
+          }
 
-        case "verdict":
-          setVerdict({
-            verdict: data.verdict,
-            sentence: data.sentence,
-            tally: {
-              reject: data.rejectCount ?? 0,
-              retry: data.retryCount ?? 0,
-              approve: data.approveCount ?? 0,
-            },
-          });
-          setCurrentSpeaker(null);
-          break;
+          case "agent_complete":
+            if (data.variant === "BASELINE") setBaselineCost(data.run.totalCost);
+            if (data.variant === "WUNDERGRAPH") setWgCost(data.run.totalCost);
+            break;
 
-        case "done":
-          eventSource.close();
-          break;
+          case "message":
+            setCurrentSpeaker(null);
+            setCourtEvents((prev) => [
+              ...prev,
+              {
+                kind: "message",
+                role: data.role,
+                text: data.text,
+                citedExhibitIds: data.citedExhibitIds,
+              },
+            ]);
+            break;
 
-        case "error":
-          setCourtEvents((prev) => [...prev, { kind: "status", text: `Error: ${data.message}` }]);
-          eventSource.close();
-          break;
-      }
-    };
+          case "jury_vote":
+            setJuryVotes((prev) => [...prev, data.vote]);
+            break;
 
-    eventSource.onerror = () => {
-      eventSource.close();
-    };
+          case "verdict":
+            setVerdict({
+              verdict: data.verdict,
+              sentence: data.sentence,
+              tally: {
+                reject: data.rejectCount ?? 0,
+                retry: data.retryCount ?? 0,
+                approve: data.approveCount ?? 0,
+              },
+            });
+            setCurrentSpeaker(null);
+            break;
+
+          case "done":
+            es.close();
+            break;
+
+          case "error":
+            if (data.message === "Case not found") {
+              setNotFound(true);
+            } else {
+              setCourtEvents((prev) => [...prev, { kind: "status", text: `Error: ${data.message}` }]);
+            }
+            es.close();
+            break;
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+      };
+    }
 
     return () => {
-      eventSource.close();
-      // Allow re-subscription if the caseId changes (it won't in practice,
-      // but this keeps the guard correct).
+      cancelled = true;
+      eventSource?.close();
       if (streamStartedFor.current === caseId) {
         streamStartedFor.current = null;
       }
@@ -176,6 +200,60 @@ export default function TrialPage() {
     if (phaseText) return phaseText;
     return "Awaiting trial to begin…";
   }, [trialOver, verdict, phaseText]);
+
+  if (notFound) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#0b1220",
+          color: "#e5e7eb",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "2rem",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            background: "rgba(15, 23, 42, 0.85)",
+            border: "1px solid rgba(148, 163, 184, 0.25)",
+            borderRadius: 16,
+            padding: "2.25rem",
+            textAlign: "center",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+          }}
+        >
+          <Scale size={44} style={{ color: "#fbbf24", margin: "0 auto 1rem" }} />
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+            Case file not in the docket
+          </h1>
+          <p style={{ color: "#94a3b8", marginBottom: "1.5rem", lineHeight: 1.55 }}>
+            This case ID isn&apos;t in our records. The dev server may have
+            restarted and cleared older cases. Convene a fresh trial to continue.
+          </p>
+          <Link
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.75rem 1.25rem",
+              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+              color: "#0b1220",
+              borderRadius: 10,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            <ArrowLeft size={18} />
+            Back to docket
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#0b1220", color: "#e5e7eb" }}>

@@ -29,6 +29,10 @@ generated/
 **/*.db-wal
 **/*.db-shm
 
+# Local on-disk case store (in-memory replacement)
+.data/
+**/.data/
+
 # Debug / test
 coverage/
 .turbo
