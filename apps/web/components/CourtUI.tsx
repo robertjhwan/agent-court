@@ -2,6 +2,15 @@
 
 import { Gavel } from "lucide-react";
 
+/** Format a USD amount adaptively so $0.0008 doesn't render as $0.00 */
+function fmt(n: number): string {
+  if (!isFinite(n)) return "$\u2014";
+  if (n === 0) return "$0";
+  if (Math.abs(n) < 0.01) return `$${n.toFixed(4)}`;
+  if (Math.abs(n) < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
+}
+
 const ROLE_COLORS: Record<string, string> = {
   JUDGE: "#fbbf24",
   PROSECUTOR: "#ef4444",
@@ -174,7 +183,7 @@ export const BudgetBar = ({
       >
         <span style={{ color: variant === "WUNDERGRAPH" ? "#10b981" : "#f59e0b" }}>{label}</span>
         <span style={{ fontFamily: "ui-monospace, monospace", color: overBudget ? "#fca5a5" : "#cbd5e1" }}>
-          ${current.toFixed(3)} / ${max.toFixed(2)}
+          {fmt(current)} / {fmt(max)}
           {overBudget && <span style={{ marginLeft: "0.4rem", fontWeight: 700 }}>OVER</span>}
         </span>
       </div>
@@ -294,7 +303,7 @@ export const ToolCallTicker = ({
                   {call.tool}
                 </span>
                 <span style={{ color: "#64748b", fontVariantNumeric: "tabular-nums" }}>
-                  ${call.cost.toFixed(3)} · {call.latencyMs}ms
+                  {fmt(call.cost)} · {call.latencyMs}ms
                 </span>
               </div>
             );

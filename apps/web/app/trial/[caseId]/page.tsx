@@ -17,7 +17,13 @@ import {
   type StreamedToolCall,
 } from "@/components/CourtUI";
 
-const BUDGET = 0.5;
+const DEFAULT_BUDGET = 0.5;
+
+function formatBudget(n: number) {
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
+}
 
 type CourtEvent =
   | { kind: "message"; role: string; text: string; citedExhibitIds?: string[] }
@@ -29,6 +35,7 @@ export default function TrialPage() {
   const search = useSearchParams();
   const caseId = params.caseId as string;
   const isDemo = search.get("demo") === "true";
+  const isLive = search.get("live") === "true";
 
   const [caseTask, setCaseTask] = useState<string | null>(null);
   const [phase, setPhase] = useState<string | null>(null);
@@ -42,8 +49,9 @@ export default function TrialPage() {
   const [wgCost, setWgCost] = useState(0);
 
   const [juryVotes, setJuryVotes] = useState<JuryVoteData[]>([]);
-  const [verdict, setVerdict] = useState<{ verdict: string; sentence: string; tally?: { reject: number; retry: number; approve: number } } | null>(null);
+  const [verdict, setVerdict] = useState<{ verdict: string; sentence: string; tally?: { reject: number; retry: number; approve: number }; stats?: Record<string, unknown> } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [budget, setBudget] = useState<number>(DEFAULT_BUDGET);
 
   const courtScrollRef = useRef<HTMLDivElement>(null);
   const streamStartedFor = useRef<string | null>(null);
@@ -75,9 +83,12 @@ export default function TrialPage() {
 
       if (cancelled) return;
 
-      eventSource = new EventSource(
-        `/api/cases/${caseId}/stream${isDemo ? "?demo=true" : "?demo=false"}`
-      );
+      const qs = isLive
+        ? "?live=true"
+        : isDemo
+          ? "?demo=true"
+          : "?demo=false";
+      eventSource = new EventSource(`/api/cases/${caseId}/stream${qs}`);
       attachStreamHandlers(eventSource);
     })();
 
@@ -118,6 +129,11 @@ export default function TrialPage() {
             break;
           }
 
+          case "tool_call_complete":
+            if (data.variant === "BASELINE") setBaselineCost(data.totalCost);
+            if (data.variant === "WUNDERGRAPH") setWgCost(data.totalCost);
+            break;
+
           case "agent_complete":
             if (data.variant === "BASELINE") setBaselineCost(data.run.totalCost);
             if (data.variant === "WUNDERGRAPH") setWgCost(data.run.totalCost);
@@ -140,6 +156,10 @@ export default function TrialPage() {
             setJuryVotes((prev) => [...prev, data.vote]);
             break;
 
+          case "budget":
+            if (typeof data.budget === "number") setBudget(data.budget);
+            break;
+
           case "verdict":
             setVerdict({
               verdict: data.verdict,
@@ -149,6 +169,7 @@ export default function TrialPage() {
                 retry: data.retryCount ?? 0,
                 approve: data.approveCount ?? 0,
               },
+              stats: data.stats,
             });
             setCurrentSpeaker(null);
             break;
@@ -191,8 +212,8 @@ export default function TrialPage() {
     });
   }, [courtEvents.length, currentSpeaker]);
 
-  const baselineOver = baselineCost > BUDGET;
-  const wgOver = wgCost > BUDGET;
+  const baselineOver = baselineCost > budget;
+  const wgOver = wgCost > budget;
   const trialOver = verdict !== null;
 
   const heroSubtitle = useMemo(() => {
@@ -439,13 +460,13 @@ export default function TrialPage() {
               <h2 style={{ fontSize: "1rem", fontWeight: 700, fontFamily: "Georgia, serif" }}>
                 Budget Ledger
               </h2>
-              <span style={{ fontSize: "0.7rem", color: "#64748b" }}>Limit ${BUDGET.toFixed(2)}</span>
+              <span style={{ fontSize: "0.7rem", color: "#64748b" }}>Limit {formatBudget(budget)}</span>
             </div>
             <BudgetBar
               label="Defendant A — Baseline"
               variant="BASELINE"
               current={baselineCost}
-              max={BUDGET}
+              max={budget}
               callCount={baselineCalls.length}
               pulse={baselineOver}
             />
@@ -453,7 +474,7 @@ export default function TrialPage() {
               label="Defendant B — WunderGraph"
               variant="WUNDERGRAPH"
               current={wgCost}
-              max={BUDGET}
+              max={budget}
               callCount={wgCalls.length}
               pulse={wgOver}
             />

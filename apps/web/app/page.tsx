@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scale, Plus, Play, Loader2 } from "lucide-react";
+import { Scale, Plus, Play, Loader2, Zap } from "lucide-react";
 
 type CaseListItem = {
   id: string;
@@ -53,20 +53,28 @@ export default function HomePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const launchTrial = async (mode: "demo" | "manual") => {
-    // Use ref for instant guard (state setter is async).
+  const launchTrial = async (mode: "demo" | "manual" | "live") => {
     if (launchInFlight.current) return;
     launchInFlight.current = true;
     setLaunching(true);
     try {
+      const task =
+        mode === "live"
+          ? "Find the cheapest refundable flight from SFO to JFK on 2026-05-02 that satisfies our company policy, and recommend it for booking."
+          : DEMO_TASK;
       const res = await fetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: DEMO_TASK }),
+        body: JSON.stringify({ task }),
       });
       const data = await res.json();
-      const url = `/trial/${data.caseId}${mode === "demo" ? "?demo=true" : "?demo=false"}`;
-      router.push(url);
+      const qs =
+        mode === "live"
+          ? "?live=true"
+          : mode === "demo"
+            ? "?demo=true"
+            : "?demo=false";
+      router.push(`/trial/${data.caseId}${qs}`);
     } catch {
       launchInFlight.current = false;
       setLaunching(false);
@@ -160,15 +168,15 @@ export default function HomePage() {
             style={{
               fontSize: "1rem",
               color: "#94a3b8",
-              maxWidth: 640,
+              maxWidth: 720,
               margin: "0 auto 2rem",
               lineHeight: 1.6,
             }}
           >
             A baseline agent stumbles through scattered REST calls and goes into debt. A
-            WunderGraph-enabled agent finishes the same task in two federated calls. Watch a live
-            judge, prosecutor, defense, and 5-juror panel debate the evidence — then deliver the
-            sentence.
+            WunderGraph-enabled agent finishes the same task in one federated call. A live
+            judge, prosecutor, defense, and 5-juror panel debate the actual evidence — then
+            deliver the sentence.
           </p>
 
           <div
@@ -177,9 +185,53 @@ export default function HomePage() {
               gap: "1rem",
               justifyContent: "center",
               flexWrap: "wrap",
-              marginBottom: "2rem",
+              marginBottom: "1.4rem",
             }}
           >
+            <button
+              onClick={() => launchTrial("live")}
+              disabled={launching}
+              style={{
+                position: "relative",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.65rem",
+                background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                color: "#0b1220",
+                fontWeight: 800,
+                fontSize: "1.1rem",
+                padding: "1.05rem 2.2rem",
+                borderRadius: "0.65rem",
+                border: "none",
+                cursor: launching ? "wait" : "pointer",
+                animation: launching ? undefined : "hero-pulse 2.4s ease-in-out infinite",
+                boxShadow: "0 0 0 0 rgba(16, 185, 129, 0.55), 0 0 30px rgba(16, 185, 129, 0.35)",
+                transition: "transform 0.15s ease",
+              }}
+              onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.97)")}
+              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            >
+              <Zap style={{ width: "1.3rem", height: "1.3rem" }} fill="#0b1220" />
+              {launching ? "Convening court\u2026" : "Run LIVE Trial"}
+              <span
+                style={{
+                  position: "absolute",
+                  top: -8,
+                  right: -10,
+                  background: "#0b1220",
+                  color: "#10b981",
+                  border: "1px solid #10b981",
+                  fontSize: "0.6rem",
+                  fontWeight: 800,
+                  padding: "0.15rem 0.45rem",
+                  borderRadius: 999,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                REAL LLM
+              </span>
+            </button>
             <button
               onClick={() => launchTrial("demo")}
               disabled={launching}
@@ -190,30 +242,19 @@ export default function HomePage() {
                 background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
                 color: "#0b1220",
                 fontWeight: 700,
-                fontSize: "1.1rem",
-                padding: "1.05rem 2.2rem",
+                fontSize: "1rem",
+                padding: "1.05rem 1.8rem",
                 borderRadius: "0.65rem",
                 border: "none",
                 cursor: launching ? "wait" : "pointer",
-                animation: launching ? undefined : "hero-pulse 2.4s ease-in-out infinite",
                 transition: "transform 0.15s ease",
-                letterSpacing: "0.01em",
               }}
               onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.97)")}
               onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
               onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
             >
-              {launching ? (
-                <>
-                  <Loader2 style={{ width: "1.3rem", height: "1.3rem", animation: "spin 0.8s linear infinite" }} />
-                  Convening court…
-                </>
-              ) : (
-                <>
-                  <Play style={{ width: "1.3rem", height: "1.3rem" }} fill="#0b1220" />
-                  Run Live Demo
-                </>
-              )}
+              <Play style={{ width: "1.1rem", height: "1.1rem" }} fill="#0b1220" />
+              Run Scripted Demo
             </button>
             <button
               onClick={() => launchTrial("manual")}
@@ -225,16 +266,32 @@ export default function HomePage() {
                 background: "transparent",
                 color: "#cbd5e1",
                 fontWeight: 600,
-                fontSize: "0.95rem",
-                padding: "1.05rem 1.6rem",
+                fontSize: "0.9rem",
+                padding: "1.05rem 1.4rem",
                 borderRadius: "0.65rem",
                 border: "1px solid #334155",
                 cursor: launching ? "wait" : "pointer",
               }}
             >
               <Plus style={{ width: "1.05rem", height: "1.05rem" }} />
-              Quick Run (no pacing)
+              Scripted (no pacing)
             </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: "0.7rem",
+              color: "#64748b",
+              maxWidth: 720,
+              margin: "0 auto 2rem",
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: "#10b981" }}>LIVE</strong> = real OpenAI tool-use, real
+            Apollo Federation 2 supergraph (WunderGraph spec), real TinyFish Fetch API, real
+            LLM-driven jury verdicts ($\u22480.003/run, \u224820s).&nbsp;&nbsp;
+            <strong style={{ color: "#fbbf24" }}>SCRIPTED</strong> = canned narrative with
+            dramatic pacing (\u224850s). Both run end-to-end without breaking.
           </div>
 
           <div
