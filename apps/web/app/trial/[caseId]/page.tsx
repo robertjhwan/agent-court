@@ -25,6 +25,78 @@ function formatBudget(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+function LiveStatsCard({ stats }: { stats: Record<string, unknown> }) {
+  const baselineCost = Number(stats.baselineCost ?? 0);
+  const wgCost = Number(stats.wgCost ?? 0);
+  const baselineLlmCost = Number(stats.baselineLlmCost ?? baselineCost);
+  const wgLlmCost = Number(stats.wgLlmCost ?? wgCost);
+  const baselineToolCost = Number(stats.baselineToolCost ?? 0);
+  const wgToolCost = Number(stats.wgToolCost ?? 0);
+  const baselineCalls = Number(stats.baselineCalls ?? 0);
+  const wgCalls = Number(stats.wgCalls ?? 0);
+  const baselineTokens = Number(stats.baselineTokens ?? 0);
+  const wgTokens = Number(stats.wgTokens ?? 0);
+  const savingsPct = Number(stats.savingsPct ?? 0);
+  const courtCost = Number(stats.courtCost ?? 0);
+  const callRatio = wgCalls > 0 ? baselineCalls / wgCalls : 0;
+  const tokenRatio = wgTokens > 0 ? baselineTokens / wgTokens : 0;
+  const llmCostRatio = wgLlmCost > 0 ? baselineLlmCost / wgLlmCost : 0;
+
+  const Row = ({ label, baseline, wg, ratio }: { label: string; baseline: string; wg: string; ratio?: string }) => (
+    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 0.7fr", gap: "0.6rem", alignItems: "center", fontSize: "0.82rem", padding: "0.5rem 0", borderBottom: "1px solid #1e293b" }}>
+      <div style={{ color: "#94a3b8" }}>{label}</div>
+      <div style={{ color: "#f59e0b", fontFamily: "ui-monospace, monospace" }}>{baseline}</div>
+      <div style={{ color: "#10b981", fontFamily: "ui-monospace, monospace" }}>{wg}</div>
+      <div style={{ color: "#fca5a5", fontFamily: "ui-monospace, monospace", textAlign: "right", fontSize: "0.78rem" }}>{ratio ?? ""}</div>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        marginTop: "1rem",
+        background: "linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(15, 23, 42, 0.6))",
+        border: "1px solid rgba(16, 185, 129, 0.4)",
+        borderRadius: "0.6rem",
+        padding: "1rem 1.1rem",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.6rem" }}>
+        <h3 style={{ fontSize: "0.92rem", fontWeight: 700, fontFamily: "Georgia, serif", color: "#e5e7eb" }}>
+          Live Run \u2014 Real Numbers
+        </h3>
+        <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
+          OpenAI gpt-4o-mini \u00b7 Apollo Federation 2
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 0.7fr", gap: "0.6rem", paddingBottom: "0.4rem", borderBottom: "1px solid #334155", fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        <div></div>
+        <div>Baseline</div>
+        <div>WunderGraph</div>
+        <div style={{ textAlign: "right" }}>Multiple</div>
+      </div>
+      <Row label="LLM cost" baseline={formatBudget(baselineLlmCost)} wg={formatBudget(wgLlmCost)} ratio={llmCostRatio > 0 ? `${llmCostRatio.toFixed(1)}x` : ""} />
+      <Row label="Tool calls" baseline={String(baselineCalls)} wg={String(wgCalls)} ratio={callRatio > 0 ? `${callRatio.toFixed(1)}x` : ""} />
+      <Row label="Tokens" baseline={baselineTokens.toLocaleString()} wg={wgTokens.toLocaleString()} ratio={tokenRatio > 0 ? `${tokenRatio.toFixed(1)}x` : ""} />
+      <Row
+        label="Tool/infra cost"
+        baseline={formatBudget(baselineToolCost)}
+        wg={formatBudget(wgToolCost)}
+        ratio={baselineToolCost === wgToolCost ? "tied" : ""}
+      />
+      <div style={{ marginTop: "0.7rem", padding: "0.6rem 0.8rem", background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.35)", borderRadius: "0.4rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "#10b981", fontWeight: 700, fontSize: "0.85rem" }}>WunderGraph LLM savings</span>
+        <span style={{ color: "#10b981", fontWeight: 800, fontSize: "1.1rem", fontFamily: "ui-monospace, monospace" }}>
+          {savingsPct.toFixed(1)}%
+        </span>
+      </div>
+      <div style={{ marginTop: "0.5rem", fontSize: "0.68rem", color: "#64748b", textAlign: "right" }}>
+        Total \u00b7 Baseline {formatBudget(baselineCost)} \u00b7 WunderGraph {formatBudget(wgCost)} \u00b7 Court {formatBudget(courtCost)}
+      </div>
+    </div>
+  );
+}
+
 type CourtEvent =
   | { kind: "message"; role: string; text: string; citedExhibitIds?: string[] }
   | { kind: "status"; text: string }
@@ -437,12 +509,15 @@ export default function TrialPage() {
           </div>
 
           {verdict && (
-            <VerdictCard
-              show={!!verdict}
-              verdict={verdict.verdict}
-              sentence={verdict.sentence}
-              tally={verdict.tally}
-            />
+            <>
+              <VerdictCard
+                show={!!verdict}
+                verdict={verdict.verdict}
+                sentence={verdict.sentence}
+                tally={verdict.tally}
+              />
+              {verdict.stats && <LiveStatsCard stats={verdict.stats} />}
+            </>
           )}
         </div>
 

@@ -83,7 +83,8 @@ function detectDuplicates(run: LiveAgentResult): string[] {
 function buildEvidenceSummary(baseline: LiveAgentResult, wundergraph: LiveAgentResult, budget: number): string {
   const baselineDups = detectDuplicates(baseline);
   const wgDups = detectDuplicates(wundergraph);
-  const costRatio = wundergraph.totalCost > 0 ? baseline.totalCost / wundergraph.totalCost : Infinity;
+  const llmRatio = wundergraph.llmCost > 0 ? baseline.llmCost / wundergraph.llmCost : Infinity;
+  const totalRatio = wundergraph.totalCost > 0 ? baseline.totalCost / wundergraph.totalCost : Infinity;
   const callRatio = wundergraph.toolCalls.length > 0 ? baseline.toolCalls.length / wundergraph.toolCalls.length : Infinity;
   const tokenRatio =
     wundergraph.promptTokens + wundergraph.completionTokens > 0
@@ -95,11 +96,13 @@ function buildEvidenceSummary(baseline: LiveAgentResult, wundergraph: LiveAgentR
     `Find the cheapest refundable flight from SFO to JFK satisfying company policy.`,
     ``,
     `=== HEADLINE COMPARISON (use these numbers in your reasoning) ===`,
-    `Baseline cost  $${baseline.totalCost.toFixed(4)}  vs  WunderGraph cost  $${wundergraph.totalCost.toFixed(4)}  (baseline is ${costRatio.toFixed(2)}x more expensive)`,
-    `Baseline calls ${baseline.toolCalls.length}      vs  WunderGraph calls ${wundergraph.toolCalls.length}       (baseline made ${callRatio.toFixed(1)}x more calls)`,
+    `LLM cost (the meaningful metric \u2014 tool/infra cost is fixed for both):`,
+    `  Baseline LLM cost  $${baseline.llmCost.toFixed(4)}  vs  WunderGraph LLM cost  $${wundergraph.llmCost.toFixed(4)}  (baseline is ${llmRatio.toFixed(2)}x more expensive on LLM alone)`,
+    `Baseline tool calls ${baseline.toolCalls.length}  vs  WunderGraph tool calls ${wundergraph.toolCalls.length}  (baseline made ${callRatio.toFixed(1)}x more calls)`,
     `Baseline tokens ${baseline.promptTokens + baseline.completionTokens}  vs  WunderGraph tokens ${wundergraph.promptTokens + wundergraph.completionTokens}  (baseline used ${tokenRatio.toFixed(2)}x more tokens)`,
     `Baseline latency ${baseline.totalLatencyMs}ms  vs  WunderGraph latency ${wundergraph.totalLatencyMs}ms`,
-    `Per-run BUDGET: $${budget.toFixed(4)}.  Baseline is ${baseline.totalCost > budget ? `OVER BUDGET by $${(baseline.totalCost - budget).toFixed(4)} (${(((baseline.totalCost - budget) / budget) * 100).toFixed(0)}%)` : `under budget by $${(budget - baseline.totalCost).toFixed(4)}`}.  WunderGraph is ${wundergraph.totalCost > budget ? `OVER BUDGET` : "comfortably under"}.`,
+    `Total cost incl. tools: Baseline $${baseline.totalCost.toFixed(4)}  vs  WunderGraph $${wundergraph.totalCost.toFixed(4)}  (baseline is ${totalRatio.toFixed(2)}x of WunderGraph total)`,
+    `Per-run BUDGET (1.5x WunderGraph LLM + tools): $${budget.toFixed(4)}.  Baseline is ${baseline.totalCost > budget ? `OVER BUDGET by $${(baseline.totalCost - budget).toFixed(4)} (${(((baseline.totalCost - budget) / budget) * 100).toFixed(0)}%)` : `under budget by $${(budget - baseline.totalCost).toFixed(4)}`}.  WunderGraph is ${wundergraph.totalCost > budget ? `OVER BUDGET` : "comfortably under"}.`,
     ``,
     `=== DUPLICATE-CALL ANALYSIS ===`,
     baselineDups.length > 0 ? `Baseline made redundant tool calls:\n  - ${baselineDups.join("\n  - ")}` : `Baseline: no exact-duplicate calls detected.`,
@@ -129,9 +132,14 @@ function buildEvidenceSummary(baseline: LiveAgentResult, wundergraph: LiveAgentR
   ].join("\n");
 }
 
-/** Adaptive budget: 1.5\u00d7 what WunderGraph proved is achievable. */
+/**
+ * Adaptive budget: 1.5\u00d7 WunderGraph's LLM cost + a flat tool allowance.
+ * Pinning to LLM cost only keeps the budget meaningful even when both agents
+ * pay the same fixed TinyFish/infra fee.
+ */
 export function computeBudget(wundergraph: LiveAgentResult): number {
-  return Math.max(wundergraph.totalCost * 1.5, 0.0001);
+  const llmBudget = Math.max(wundergraph.llmCost * 1.5, 0.00005);
+  return llmBudget + wundergraph.toolCost;
 }
 
 // ---------- Public entry: conduct a live trial ----------------------------

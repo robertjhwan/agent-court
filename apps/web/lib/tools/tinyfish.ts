@@ -86,5 +86,10 @@ export async function tinyfish_browse(args: { url: string }): Promise<TinyFishRe
   }
 }
 
-/** Estimated $ cost per TinyFish call (their pricing varies by plan; honest placeholder). */
-export const TINYFISH_COST_PER_CALL = 0.01;
+/**
+ * Estimated $ cost per TinyFish Fetch API call. Their actual Fetch pricing is
+ * sub-cent per page; we use $0.001 as a conservative placeholder so the
+ * sponsor integration shows up as a real (non-zero) line item without
+ * dominating the LLM cost comparison.
+ */
+export const TINYFISH_COST_PER_CALL = 0.001;

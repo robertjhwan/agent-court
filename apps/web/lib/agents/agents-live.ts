@@ -310,7 +310,8 @@ export async function runBaselineAgentLive(
     systemPrompt: [
       "You are a corporate travel booking agent.",
       "You have access to several REST-style tools to search flights, look up details, look up prices, check the company policy, and verify URLs via TinyFish.",
-      "Your job: find a flight that satisfies the policy and recommend booking it. Be efficient with tool calls. When you have your answer, reply in plain text \u2014 NOT a tool call \u2014 with: the chosen flight ID, airline, price, refundable status, and a one-line justification.",
+      "REQUIRED workflow: (1) gather data with the REST tools to pick a candidate, (2) call `tinyfish_browse` exactly once on the airline's site to verify (use https://www.united.com or the matching airline URL), (3) reply in plain text \u2014 NOT a tool call \u2014 with: the chosen flight ID, airline, price, refundable status, and a one-line justification.",
+      "Be efficient with tool calls. Do NOT call the same lookup tool with the same input twice.",
     ].join("\n\n"),
     tools: SCATTERED_TOOLS,
     onToolCall,
@@ -327,8 +328,11 @@ export async function runWunderGraphAgentLive(
     systemPrompt: [
       "You are a corporate travel booking agent.",
       "You have access to a single federated GraphQL supergraph (WunderGraph-spec) that stitches flight inventory and policy data into one endpoint.",
-      "Use ONE GraphQL query through `query_supergraph` to fetch everything you need: search results AND policy AND policy compliance per flight. You may use TinyFish once at the end to verify the chosen flight's URL.",
-      "Reply in plain text \u2014 NOT a tool call \u2014 with: the chosen flight ID, airline, price, refundable status, and a one-line justification.",
+      "REQUIRED workflow \u2014 follow EXACTLY:",
+      "  Step 1: Call `query_supergraph` EXACTLY ONCE with a single query that returns search results AND policy AND policyCompliant per flight in one shot. Schema includes searchFlights(from, to, date) -> [Flight] and policy -> Policy. Each Flight has: id airline from to departTime arriveTime price refundable policyCompliant policyReason.",
+      "  Step 2: Call `tinyfish_browse` EXACTLY ONCE on https://www.united.com (or the chosen airline's homepage) to verify availability.",
+      "  Step 3: Reply in plain text \u2014 NOT a tool call \u2014 with: the chosen flight ID, airline, price, refundable status, and a one-line justification.",
+      "Do NOT call query_supergraph more than once. The federated query already returns everything you need.",
     ].join("\n\n"),
     tools: FEDERATED_TOOLS,
     onToolCall,
